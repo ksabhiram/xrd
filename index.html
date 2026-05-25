@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XRD Plot Tool</title>
+    <meta name="description" content="Publication-quality XRD diffraction pattern plotting tool">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/gh/bitmaks/cm-web-fonts@latest/fonts.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>XRD Plot</h1>
+        <span>load · plot · annotate · export</span>
+    </header>
+
+    <div class="layout">
+        <!-- LEFT SIDEBAR -->
+        <div class="sidebar">
+            <div class="sb-section">
+                <h3>Main Range</h3>
+                <div style="display:flex;gap:5px;align-items:center;margin-bottom:5px;">
+                    <label style="font-size:10.5px;color:var(--muted);">From</label>
+                    <input type="number" class="numinput" id="main-from" value="20" step="0.5">
+                    <label style="font-size:10.5px;color:var(--muted);">To</label>
+                    <input type="number" class="numinput" id="main-to" value="80" step="0.5">
+                </div>
+                <button class="btn" id="apply-main-range" style="width:100%;">Apply range</button>
+            </div>
+
+            <div class="sb-section">
+                <h3>Data Files</h3>
+                <label class="upload-zone" id="drop-zone">
+                    <input type="file" id="file-input" multiple accept=".csv,.txt,.xy,.dat,.xye,.x_y">
+                    ↑ Drop files here<br>
+                    <small>CSV &nbsp;·&nbsp; TXT &nbsp;·&nbsp; XY &nbsp;·&nbsp; DAT</small>
+                </label>
+                <div style="margin-top:7px;display:flex;gap:5px;">
+                    <button class="btn" id="load-demo">Load demo</button>
+                    <button class="btn" id="clear-all" style="color:#c44;">Clear all</button>
+                </div>
+            </div>
+
+            <div class="sb-section">
+                <h3>Datasets <span style="font-weight:300;font-size:9px;">(drag to reorder)</span></h3>
+                <div class="dataset-list" id="dataset-list"></div>
+                <div style="margin-top:6px;">
+                    <button class="btn" id="stack-order-btn" title="Toggle ascending/descending stack order" style="width:100%;">↑ Ascending</button>
+                </div>
+            </div>
+
+            <div class="sb-section">
+                <h3>Stack &amp; Line</h3>
+                <div class="ctrl-row"><label>Offset</label><input type="range" id="stack-offset" min="0" max="5"
+                        step="0.05" value="1.2"><span class="val" id="stack-offset-val">1.2</span></div>
+                <div class="ctrl-row"><label>Line width</label><input type="range" id="line-width" min="0.4" max="3"
+                        step="0.1" value="1.2"><span class="val" id="line-width-val">1.2</span></div>
+                <!-- Simplified label toggles -->
+                <div class="label-toggle-row">
+                    <button class="label-toggle active" id="label-stacked-btn">◫ Legend</button>
+                    <button class="label-toggle" id="label-split-btn">⫷ Split L</button>
+                    <button class="label-toggle" id="label-nil-btn">∅ Nil</button>
+                    <button class="label-toggle" id="label-copy-btn">📋 Copy</button>
+                </div>
+                <!-- X-axis offset per dataset -->
+                <div style="margin-top:8px;">
+                    <label style="font-size:9.5px;color:var(--muted);display:block;margin-bottom:3px;">X-Axis Offset (Δ2θ°)</label>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                        <select class="numinput" id="xoffset-ds" style="flex:1;font-size:10px;padding:2px 3px;"></select>
+                        <input type="number" class="numinput" id="xoffset-val" value="0" step="0.01" style="width:58px;">
+                        <button class="btn" id="xoffset-apply" style="font-size:10px;padding:3px 6px;">Set</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sb-section">
+                <h3>Smoothing</h3>
+                <div class="smooth-toggle-row" id="smooth-toggle-row">
+                    <button class="smooth-btn active" data-smooth="0">0%</button>
+                    <button class="smooth-btn" data-smooth="5">5%</button>
+                    <button class="smooth-btn" data-smooth="10">10%</button>
+                    <button class="smooth-btn" data-smooth="20">20%</button>
+                    <button class="smooth-btn" data-smooth="35">35%</button>
+                </div>
+            </div>
+
+            <div class="sb-section">
+                <h3>X-Axis Step Size</h3>
+                <div style="display:flex;gap:5px;align-items:center;">
+                    <label style="font-size:10px;color:var(--muted);white-space:nowrap;">Step (°)</label>
+                    <input type="number" class="numinput" id="x-step-size" value="10" min="0.5" max="90" step="0.5" style="width:60px;">
+                    <button class="btn" id="apply-step" style="font-size:10px;padding:3px 8px;">Apply</button>
+                </div>
+            </div>
+
+            <div class="sb-section">
+                <h3>Plot Aspect Ratio</h3>
+                <div class="aspect-toggle-row">
+                    <button class="aspect-btn" data-ratio="1:1">1:1</button>
+                    <button class="aspect-btn" data-ratio="4:3">4:3</button>
+                    <button class="aspect-btn active" data-ratio="16:9">16:9</button>
+                    <button class="aspect-btn" data-ratio="9:16">9:16</button>
+                    <button class="aspect-btn" data-ratio="free">Free</button>
+                </div>
+            </div>
+
+            <div class="sb-section">
+                <h3>Export</h3>
+                <div style="margin-bottom:5px;">
+                    <label style="font-size:10px;color:var(--muted);">File title</label>
+                    <input type="text" class="numinput" id="export-title" value="xrd_plot" style="width:100%;box-sizing:border-box;">
+                </div>
+                <div style="display:flex;gap:5px;">
+                    <button class="btn primary" id="export-svg">SVG</button>
+                    <button class="btn primary" id="export-png">PNG ×3</button>
+                    <button class="btn primary" id="export-csv">XLSX</button>
+                </div>
+            </div>
+        </div><!-- /sidebar -->
+
+        <!-- MAIN PLOT AREA -->
+        <div class="main">
+            <div id="demo-notice">📂 Upload data files (2θ &nbsp; Intensity), or click <strong>Load demo</strong>.</div>
+            <div class="toolbar">
+                <button class="btn active" id="mouse-btn">🖱 Mouse</button>
+                <button class="btn" id="redraw-btn">↺ Redraw</button>
+                <button class="btn" id="hover-toggle">⊕ Hover Inspector</button>
+                <button class="btn" id="magnify-mode-btn">⬚ Magnify</button>
+                <button class="btn" id="ann-mode-btn">+ Annotate</button>
+                <button class="btn" id="peak-detect-btn">⊿ Detect Peaks</button>
+                <span id="status" style="font-size:10.5px;color:var(--muted);margin-left:4px;">No data</span>
+            </div>
+            <div class="plot-and-workspace">
+                <div class="plot-container" id="plot-container">
+                    <svg id="main-svg"></svg>
+                    <!-- LEFT: Temporary navigation preview (auto-hide after 3s) -->
+                    <div class="nav-preview" id="nav-preview" style="display:none;">
+                        <svg id="nav-preview-svg" width="160" height="50"></svg>
+                    </div>
+                </div>
+                <!-- RIGHT: Persistent scientific magnification workspace -->
+                <div class="magnify-workspace" id="magnify-workspace">
+                    <div class="mw-empty" id="mw-empty">
+                        <div class="mw-empty-icon">🔬</div>
+                        <div>Use the <strong>Magnify</strong> tool to select a region for analysis</div>
+                    </div>
+                    <div class="mw-panes" id="zoom-panes-container"></div>
+                </div>
+            </div>
+
+        </div><!-- /main -->
+
+        <!-- RIGHT SIDEBAR -->
+        <div class="sidebar sidebar-right">
+            <div class="sb-section">
+                <h3>Magnified Regions</h3>
+                <div style="display:flex;gap:5px;margin-bottom:5px;align-items:center;">
+                    <span style="font-size:9px;color:var(--muted);flex:1;">Auto: &lt;2° → 0.5:5 · 2–10° → 1:5 · &gt;10° → 2:5</span>
+                    <button class="btn" id="clear-all-magnify" style="color:#c44;font-size:10px;padding:3px 8px;">Clear all</button>
+                </div>
+                <div id="magnify-list" style="display:flex;flex-direction:column;gap:4px;"></div>
+            </div>
+
+            <div class="sb-section">
+                <h3>Line Dropper</h3>
+                <div style="display:flex;gap:5px;align-items:center;margin-bottom:5px;">
+                    <input type="number" class="numinput" id="drop-x" placeholder="2θ" step="0.1">
+                    <button class="btn" id="add-drop" style="flex:1;">Drop</button>
+                    <button class="btn" id="clear-drop" style="color:#c44;">Clear</button>
+                </div>
+                <div id="drop-list" style="display:flex;flex-direction:column;gap:4px;"></div>
+            </div>
+
+            <div class="sb-section">
+                <h3>Annotations</h3>
+                <div id="ann-list" style="display:flex;flex-direction:column;gap:3px;max-height:300px;overflow-y:auto;"></div>
+                <div style="margin-top:6px;">
+                    <button class="btn" id="clear-ann" style="color:#c44;width:100%;">Clear annotations</button>
+                </div>
+            </div>
+
+            <!-- Annotation Editor Panel -->
+            <div class="sb-section" id="ann-editor-section" style="display:none;">
+                <h3>Edit Annotation</h3>
+                <div id="ann-editor"></div>
+            </div>
+        </div><!-- /sidebar-right -->
+    </div>
+
+    <div id="xrd-tooltip"></div>
+    <div id="annotation-popover" class="annotation-popover" style="display:none;"></div>
+    <!-- PPT-style color picker -->
+    <div class="ppt-color-picker" id="color-picker">
+        <div class="ppt-section-label">Theme Colors</div>
+        <div class="ppt-theme-grid" id="ppt-theme-grid"></div>
+        <div class="ppt-section-label" style="margin-top:6px;">Standard Colors</div>
+        <div class="ppt-standard-grid" id="ppt-standard-grid"></div>
+        <div class="ppt-section-label" style="margin-top:6px;">Recent Colors</div>
+        <div class="ppt-recent-grid" id="ppt-recent-grid"><div class="ppt-empty-recent">None</div></div>
+        <div class="ppt-custom-row">
+            <input type="text" id="ppt-hex-input" class="ppt-hex-input" placeholder="#000000" maxlength="7">
+            <button class="btn primary" id="ppt-apply-hex" style="padding:3px 8px;font-size:10px;">Apply</button>
+        </div>
+        <div class="ppt-preview-row">
+            <div class="ppt-preview-swatch" id="ppt-preview-swatch"></div>
+            <input type="color" id="custom-color" style="flex:1;height:22px;border:none;cursor:pointer;">
+        </div>
+    </div>
+    <div id="ruler-overlay" class="ruler-overlay" style="display:none;">
+        <div class="ruler-label" id="ruler-label"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
